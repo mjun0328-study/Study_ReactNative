@@ -10,39 +10,120 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import Fontisto from "@expo/vector-icons/Fontisto";
+import { Fontisto, Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const STORAGE_KEY = "@toDos";
+const TAB_KEY = "@menu";
 
 export default function App() {
-  const [working, setWorking] = useState(true);
+  const [tab, setTab] = useState("work");
   const [text, setText] = useState("");
   const [toDos, setToDos] = useState({});
+  const [editList, setEditList] = useState([]);
 
-  const travel = () => setWorking(false);
-  const work = () => setWorking(true);
+  useEffect(() => {
+    (async () => {
+      setTab((await AsyncStorage.getItem(TAB_KEY)) ?? "work");
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      AsyncStorage.setItem(TAB_KEY, tab);
+    })();
+  }, [tab]);
+
+  const travel = () => setTab("travel");
+  const work = () => setTab("work");
   const onChangeText = (payload) => setText(payload);
   const saveToDos = async (toSave) => {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   };
+
   const loadToDos = async () => {
     const s = await AsyncStorage.getItem(STORAGE_KEY);
     setToDos(JSON.parse(s));
   };
+
   useEffect(() => {
     loadToDos();
   }, []);
+
   const addToDo = async () => {
     if (text === "") {
       return;
     }
-    const newTodos = { ...toDos, [Date.now()]: { text, working } };
+    const newTodos = { ...toDos, [Date.now()]: { text, tab, isDone: false } };
     setToDos(newTodos);
     await saveToDos(newTodos);
     setText("");
   };
-  const deleteToDo = async (key) => {
+
+  return (
+    <View style={styles.container}>
+      <StatusBar style="auto" />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={work}>
+          <Text
+            style={{
+              ...styles.btnText,
+              color: tab === "work" ? "white" : theme.grey,
+            }}
+          >
+            Work
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={travel}>
+          <Text
+            style={{
+              ...styles.btnText,
+              color: tab === "travel" ? "white" : theme.grey,
+            }}
+          >
+            Travel
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <TextInput
+        onSubmitEditing={addToDo}
+        onChangeText={onChangeText}
+        returnKeyType="done"
+        value={text}
+        placeholder={
+          tab === "work" ? "Add a To Do" : "Where do you want to go?"
+        }
+        style={styles.input}
+      />
+      <ScrollView>
+        {Object.keys(toDos).map((key) =>
+          toDos[key].tab === tab ? (
+            <ToDo
+              key={key}
+              keyValue={key}
+              toDos={toDos}
+              setToDos={setToDos}
+              saveToDos={saveToDos}
+            />
+          ) : null
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+const ToDo = ({ keyValue: key, toDos, setToDos, saveToDos }) => {
+  const [isEdit, setIsEdit] = useState(false);
+  const [newText, setNewText] = useState("");
+
+  const doneToDo = async () => {
+    const newToDos = { ...toDos };
+    newToDos[key].isDone = true;
+    setToDos(newToDos);
+    saveToDos(newToDos);
+  };
+
+  const deleteToDo = async () => {
     Alert.alert("Delete To Do?", "Are you sure?", [
       { text: "Cancel" },
       {
@@ -58,51 +139,61 @@ export default function App() {
     ]);
   };
 
+  const startEdit = () => {
+    setIsEdit(true);
+    setNewText(toDos[key].text);
+  };
+
+  const onChangeText = (payload) => setNewText(payload);
+
+  const onEndEditing = (e) => {
+    const newText = e.nativeEvent.text;
+    setIsEdit(false);
+    setNewText("");
+    const newToDos = { ...toDos };
+    newToDos[key].text = newText;
+    setToDos(newToDos);
+    saveToDos(newToDos);
+  };
+
   return (
-    <View style={styles.container}>
-      <StatusBar style="auto" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={work}>
-          <Text
-            style={{ ...styles.btnText, color: working ? "white" : theme.grey }}
-          >
-            Work
-          </Text>
+    <View style={styles.toDo} key={key}>
+      {isEdit ? (
+        <TextInput
+          style={styles.toDoText}
+          placeholder="Enter New To Do"
+          value={newText}
+          onChangeText={onChangeText}
+          onEndEditing={onEndEditing}
+          returnKeyType="done"
+          autoFocus
+        />
+      ) : (
+        <Text
+          style={{
+            ...styles.toDoText,
+            textDecorationLine: toDos[key].isDone ? "line-through" : "none",
+          }}
+        >
+          {toDos[key].text}
+        </Text>
+      )}
+      <View style={styles.toDoBtn}>
+        {!toDos[key].isDone && (
+          <TouchableOpacity onPress={() => doneToDo(key)}>
+            <Feather name="check-square" size={20} color={theme.toDoBtn} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity onPress={startEdit}>
+          <Feather name="edit-3" size={18} color={theme.toDoBtn} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={travel}>
-          <Text
-            style={{
-              ...styles.btnText,
-              color: !working ? "white" : theme.grey,
-            }}
-          >
-            Travel
-          </Text>
+        <TouchableOpacity onPress={() => deleteToDo(key)}>
+          <Fontisto name="trash" size={18} color={theme.toDoBtn} />
         </TouchableOpacity>
       </View>
-      <TextInput
-        onSubmitEditing={addToDo}
-        onChangeText={onChangeText}
-        returnKeyType="done"
-        value={text}
-        placeholder={working ? "Add a To Do" : "Where do you want to go?"}
-        style={styles.input}
-      />
-      <ScrollView>
-        {Object.keys(toDos).map((key) =>
-          toDos[key].working === working ? (
-            <View style={styles.toDo} key={key}>
-              <Text style={styles.toDoText}>{toDos[key].text}</Text>
-              <TouchableOpacity onPress={() => deleteToDo(key)}>
-                <Fontisto name="trash" size={18} color={theme.grey} />
-              </TouchableOpacity>
-            </View>
-          ) : null
-        )}
-      </ScrollView>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -139,4 +230,5 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   toDoText: { color: "white", fontSize: 16, fontWeight: "500" },
+  toDoBtn: { flexDirection: "row", alignItems: "center", gap: 10 },
 });
